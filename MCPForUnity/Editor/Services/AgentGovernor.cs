@@ -57,6 +57,43 @@ namespace MCPForUnity.Editor.Services
     }
 
     /// <summary>
+    /// Optional companion to <see cref="IAgentGovernor"/>: reports the agents
+    /// this Editor has seen. Split out so a governor can arbitrate without
+    /// keeping a roster, and so the roster can exist before any arbitration
+    /// does.
+    /// </summary>
+    public interface IAgentDirectory
+    {
+        /// <summary>
+        /// A serialisable snapshot of the known agents. Shape is the policy
+        /// layer's business; the bridge only passes it through.
+        /// </summary>
+        object Agents(JObject parameters);
+    }
+
+    /// <summary>
+    /// Optional companion to <see cref="IAgentGovernor"/>: an advisory lease
+    /// over state-changing operations.
+    ///
+    /// Declared here, ahead of any implementation, so that shipping the lease
+    /// later costs an omu package bump rather than a second round trip through
+    /// this frozen mirror — which every consumer project would have to repin.
+    /// Until something implements it, the resource and tool below answer
+    /// "not installed", which is the honest answer and not an error.
+    /// </summary>
+    public interface IAgentLease
+    {
+        /// <summary>Who holds the Editor, since when, and until when.</summary>
+        object Status(JObject parameters);
+
+        /// <summary>Take the lease explicitly, for a multi-step operation.</summary>
+        object Acquire(McpClientInfo client, JObject parameters);
+
+        /// <summary>Hand the lease back before it expires.</summary>
+        object Release(McpClientInfo client, JObject parameters);
+    }
+
+    /// <summary>
     /// Registration point for the optional governor. With none registered the
     /// bridge behaves exactly as it did before: every command is allowed.
     /// </summary>
@@ -66,6 +103,25 @@ namespace MCPForUnity.Editor.Services
 
         /// <summary>The registered governor, or null when none is installed.</summary>
         public static IAgentGovernor Current => _current;
+
+        /// <summary>The governor's roster, when it keeps one.</summary>
+        public static IAgentDirectory Directory => _current as IAgentDirectory;
+
+        /// <summary>The governor's lease, when it implements one.</summary>
+        public static IAgentLease Lease => _current as IAgentLease;
+
+        /// <summary>
+        /// Standard answer for a surface nothing implements yet. Says which
+        /// capability is missing rather than failing, so a caller can tell
+        /// "no lease system here" from "the call went wrong".
+        /// </summary>
+        public static object NotInstalled(string capability) => new
+        {
+            installed = false,
+            capability,
+            message = $"No {capability} is installed in this Editor. " +
+                      "Install or update the omu package to enable it.",
+        };
 
         /// <summary>
         /// Install a governor. Domain reloads clear this, so implementations
