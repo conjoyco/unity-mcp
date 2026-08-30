@@ -64,6 +64,13 @@ namespace MCPForUnity.Editor.Services.Transport
 
         private static readonly Dictionary<string, PendingCommand> Pending = new();
         private static readonly object PendingLock = new();
+
+        /// <summary>
+        /// The client whose command is executing right now, or null outside a
+        /// command and whenever the caller could not be identified. Main-thread
+        /// only, which is where every command runs.
+        /// </summary>
+        internal static McpClientInfo CurrentClient { get; private set; }
         private static bool updateHooked;
         private static bool initialised;
 
@@ -361,9 +368,36 @@ namespace MCPForUnity.Editor.Services.Transport
                     return;
                 }
 
+                // Arbitration between concurrent MCP clients. Same shape and
+                // same slot as the two checks above: a pre-execution veto that
+                // answers with a structured error rather than executing.
+                var verdict = AgentGovernor.Review(command.type, parameters, command.client);
+                if (!verdict.Allowed)
+                {
+                    pending.TrySetResult(SerializeDenied(command.type, verdict));
+                    RemovePending(id, pending);
+                    return;
+                }
+
                 var logType = resourceMeta != null ? "resource" : toolMeta != null ? "tool" : "unknown";
                 var sw = McpLogRecord.IsEnabled ? System.Diagnostics.Stopwatch.StartNew() : null;
-                var result = CommandRegistry.ExecuteCommand(command.type, parameters, pending.CompletionSource);
+
+                // Published for the synchronous span of the handler so a tool
+                // that starts a long-running job (a test run, play mode) can
+                // record who asked for it. Async continuations run after this
+                // is cleared, so anything needing the initiator later must
+                // capture it while the handler is still on the stack.
+                var previousClient = CurrentClient;
+                CurrentClient = command.client;
+                object result;
+                try
+                {
+                    result = CommandRegistry.ExecuteCommand(command.type, parameters, pending.CompletionSource);
+                }
+                finally
+                {
+                    CurrentClient = previousClient;
+                }
 
                 if (result == null)
                 {
@@ -448,6 +482,25 @@ namespace MCPForUnity.Editor.Services.Transport
             }
 
             pending.Dispose();
+        }
+
+        /// <summary>
+        /// A refusal the calling agent can act on. Carries the governor's
+        /// structured detail — who holds the Editor, for how long, whether
+        /// waiting is reasonable — because an agent told only "busy" retries in
+        /// a loop or invents an explanation for its user.
+        /// </summary>
+        private static string SerializeDenied(string commandType, AgentVerdict verdict)
+        {
+            var deniedResponse = new
+            {
+                status = "error",
+                error = verdict.Reason,
+                command = commandType ?? "Unknown",
+                denied = true,
+                detail = verdict.Detail
+            };
+            return JsonConvert.SerializeObject(deniedResponse);
         }
 
         private static string SerializeError(string message, string commandType = null, string stackTrace = null)

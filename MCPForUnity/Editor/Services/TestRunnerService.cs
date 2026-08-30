@@ -221,7 +221,11 @@ namespace MCPForUnity.Editor.Services
                 _leafResults.Clear();
                 _runCompletionSource = new TaskCompletionSource<TestRunResult>(TaskCreationOptions.RunContinuationsAsynchronously);
                 // Mark running immediately so readiness snapshots reflect the busy state even before callbacks fire.
-                TestRunStatus.MarkStarted(mode);
+                // Captured on the stack: the dispatcher clears the current
+                // client as soon as this handler returns, and the run outlives it.
+                TestRunStatus.MarkStarted(
+                    mode,
+                    Transport.TransportCommandDispatcher.CurrentClient?.DisplayName);
 
                 var filter = new Filter
                 {

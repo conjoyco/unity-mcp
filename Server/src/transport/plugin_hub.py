@@ -21,6 +21,7 @@ from services.api_key_service import ApiKeyService
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+from transport.agent_identity import current_agent_wire
 from transport.models import (
     WelcomeMessage,
     RegisteredMessage,
@@ -335,6 +336,7 @@ class PluginHub(WebSocketEndpoint):
                 name=command_type,
                 params=params,
                 timeout=unity_timeout_s,
+                client=current_agent_wire(),
             )
             try:
                 await websocket.send_json(msg.model_dump())

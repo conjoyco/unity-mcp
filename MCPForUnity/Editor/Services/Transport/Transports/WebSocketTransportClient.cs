@@ -616,6 +616,14 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                 ["params"] = parameters
             };
 
+            // Carry the calling agent's identity through to the dispatcher.
+            // Absent on older servers, which is handled downstream as unnamed.
+            JObject client = payload.Value<JObject>("client");
+            if (client != null)
+            {
+                commandEnvelope["client"] = client;
+            }
+
             string responseJson;
             try
             {

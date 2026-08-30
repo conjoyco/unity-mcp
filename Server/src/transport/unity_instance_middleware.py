@@ -12,6 +12,7 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 
 from core.config import config
 from services.registry import get_registered_tools
+from transport.agent_identity import identify_context, set_current_agent
 from transport.plugin_hub import PluginHub
 
 logger = logging.getLogger("mcp-for-unity-server")
@@ -324,6 +325,13 @@ class UnityInstanceMiddleware(Middleware):
     async def _inject_unity_instance(self, context: MiddlewareContext) -> None:
         """Inject active Unity instance and user_id into context if available."""
         ctx = context.fastmcp_context
+
+        # Publish who is calling for the rest of this request. The transports
+        # read it when they frame the command, so Unity learns which agent sent
+        # it. Set before anything that can fail: an unidentified caller is
+        # allowed through as unnamed, but a caller we *could* have named should
+        # not go unnamed just because instance resolution threw.
+        set_current_agent(identify_context(ctx))
 
         # Resolve user_id from the HTTP request's API key header
         user_id = await self._resolve_user_id()

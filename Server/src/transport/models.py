@@ -22,6 +22,10 @@ class ExecuteCommandMessage(BaseModel):
     name: str
     params: dict[str, Any]
     timeout: float
+    # Who asked for this command: {"id", "label", "name"}. Absent when the
+    # caller could not be identified (an internal call, or an older client);
+    # the Editor treats an absent client as unnamed-but-permitted.
+    client: dict[str, Any] | None = None
 
 
 class PingMessage(BaseModel):

@@ -483,7 +483,7 @@ namespace MCPForUnity.Editor.Services
                     Mode = testsMode,
                     CurrentJobId = string.IsNullOrEmpty(currentJobId) ? null : currentJobId,
                     StartedUnixMs = TestRunStatus.StartedUnixMs,
-                    StartedBy = "unknown",
+                    StartedBy = TestRunStatus.StartedBy ?? "unknown",
                     LastRun = TestRunStatus.FinishedUnixMs.HasValue
                         ? new EditorStateLastRun
                         {

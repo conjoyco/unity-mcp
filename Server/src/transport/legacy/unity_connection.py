@@ -1,5 +1,6 @@
 from core.config import config
 import contextlib
+import contextvars
 from dataclasses import dataclass
 import errno
 import json
@@ -15,6 +16,7 @@ import time
 from typing import Any
 
 from models.models import MCPResponse, UnityInstanceInfo
+from transport.agent_identity import current_agent_wire
 from transport.legacy.stdio_port_registry import stdio_port_registry
 
 
@@ -373,10 +375,18 @@ class UnityConnection:
                 if command_type == 'ping':
                     payload = b'ping'
                 else:
-                    payload = json.dumps({
+                    command_body = {
                         'type': command_type,
                         'params': params,
-                    }).encode('utf-8')
+                    }
+                    # Identify the calling agent when we know it. Read here
+                    # rather than passed in: async_send_command_with_retry
+                    # copies the request context into this worker thread, so
+                    # the context variable is still visible.
+                    agent = current_agent_wire()
+                    if agent is not None:
+                        command_body['client'] = agent
+                    payload = json.dumps(command_body).encode('utf-8')
 
                 # Send/receive are serialized to protect the shared socket
                 with self._io_lock:
@@ -971,9 +981,15 @@ async def async_send_command_with_retry(
         import asyncio  # local import to avoid mandatory asyncio dependency for sync callers
         if loop is None:
             loop = asyncio.get_running_loop()
+        # run_in_executor does not propagate context variables the way
+        # asyncio.to_thread does, so copy the context explicitly. Without this
+        # the stdio path loses the calling agent's identity at the thread hop
+        # and every stdio command reaches Unity unnamed.
+        request_context = contextvars.copy_context()
         result = await loop.run_in_executor(
             None,
-            lambda: send_command_with_retry(
+            lambda: request_context.run(
+                send_command_with_retry,
                 command_type, params, instance_id=instance_id, max_retries=max_retries,
                 retry_ms=retry_ms, retry_on_reload=retry_on_reload),
         )

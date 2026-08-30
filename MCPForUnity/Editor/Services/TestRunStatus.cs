@@ -15,6 +15,7 @@ namespace MCPForUnity.Editor.Services
         private static TestMode? _mode;
         private static long? _startedUnixMs;
         private static long? _finishedUnixMs;
+        private static string _startedBy;
 
         public static bool IsRunning
         {
@@ -36,7 +37,17 @@ namespace MCPForUnity.Editor.Services
             get { lock (LockObj) return _finishedUnixMs; }
         }
 
-        public static void MarkStarted(TestMode mode)
+        /// <summary>
+        /// Label of the MCP client that started the current run, or null when
+        /// it was started by the human in the Test Runner window or by a client
+        /// the server could not identify.
+        /// </summary>
+        public static string StartedBy
+        {
+            get { lock (LockObj) return _startedBy; }
+        }
+
+        public static void MarkStarted(TestMode mode, string startedBy = null)
         {
             lock (LockObj)
             {
@@ -44,6 +55,7 @@ namespace MCPForUnity.Editor.Services
                 _mode = mode;
                 _startedUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 _finishedUnixMs = null;
+                _startedBy = startedBy;
             }
         }
 
@@ -54,6 +66,7 @@ namespace MCPForUnity.Editor.Services
                 _isRunning = false;
                 _finishedUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 _mode = null;
+                _startedBy = null;
             }
         }
     }
