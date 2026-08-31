@@ -53,9 +53,9 @@ def test_label_survives_process_restart():
 
     src = Path(__file__).resolve().parents[1] / "src"
     code = (
-        "import sys; sys.path.insert(0, r'%s');"
+        "import sys; sys.path.insert(0, %r);"
         "from transport.agent_identity import label_for; print(label_for('stable-session'))"
-        % src
+        % str(src)
     )
     out = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
